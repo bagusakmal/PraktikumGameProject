@@ -7,6 +7,7 @@ public class PlayerController : MonoBehaviour
     private CharacterController controller;
     private Vector3 move;
     public float forwardSpeed;
+    public float maxSpeed;
 
     private int desiredLane = 1; // 0 left, 1 middle, 2 right
     [SerializeField]
@@ -16,9 +17,46 @@ public class PlayerController : MonoBehaviour
     public float jumpForce = 2;
     private Vector3 velocity;
 
+    public bool isGrounded;
+    public LayerMask groundLayer;
+    public Transform groundCheck;
+
+    public Animator animator;
+
+    private bool isSliding = false;
+
+    bool toggle = false;
+
+    public float slideDuration = 1.5f;
+
+    //jarak raycast
+    public float raycastDistance = 0.2f; // Jarak Raycast ke bawah
+
     void Start()
     {
         controller = GetComponent<CharacterController>();
+    }
+
+    private void FixedUpdate()
+    {
+        if (!PlayerManager.isGameStarted)
+            return;
+
+        if (toggle)
+        {
+            toggle = false;
+            if (forwardSpeed < maxSpeed)
+                forwardSpeed += 0.1f * Time.fixedDeltaTime;
+        } else
+        {
+            toggle = true;
+            if (Time.timeScale < 2f)
+                Time.timeScale += 0.005f * Time.fixedDeltaTime;
+        }
+
+        //apply gravity
+        if (isGrounded && velocity.y < 0)
+            velocity.y = -1f;
     }
 
     // Update is called once per frame
@@ -27,7 +65,15 @@ public class PlayerController : MonoBehaviour
         if (!PlayerManager.isGameStarted)
             return;
 
+        //update animator
+        animator.SetBool("isGameStarted", true);
+
+        // Update movement
         move.z = forwardSpeed;
+
+        // Check is the player is grounded
+        isGrounded = Physics.Raycast(groundCheck.position, Vector3.down, raycastDistance, groundLayer);
+        animator.SetBool("isGrounded", isGrounded);
 
         if (controller.isGrounded)
         {
@@ -37,10 +83,18 @@ public class PlayerController : MonoBehaviour
             {
                 Jump();
             }
+            if (Input.GetKeyDown(KeyCode.DownArrow) || SweepManager.swipeDown && !isSliding)
+                StartCoroutine(Slide());
         }
         else
         {
             move.y += gravity * Time.deltaTime;
+
+            if (Input.GetKeyDown(KeyCode.DownArrow) || SweepManager.swipeDown && !isSliding)
+            {
+                StartCoroutine(Slide());
+                velocity.y = -10;
+            }
         }
 
         controller.Move(move * Time.deltaTime);
@@ -70,18 +124,20 @@ public class PlayerController : MonoBehaviour
         transform.position = targetPosition;
     }
 
-    private void FixedUpdate()
-    {
-        if (!PlayerManager.isGameStarted)
-            return;
+    //private void FixedUpdate()
+    //{
+    //    if (!PlayerManager.isGameStarted)
+    //        return;
 
-        controller.Move(move * Time.fixedDeltaTime);
+    //    controller.Move(move * Time.fixedDeltaTime);
 
-    }
+    //}
 
     private void Jump()
     {
+        animator.SetBool("isSliding", false);
         move.y = jumpForce;
+
     }
     private void OnControllerColliderHit(ControllerColliderHit hit)
     {
@@ -92,7 +148,33 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    
+    private IEnumerator Slide()
+    {
+        isSliding = true;
+        animator.SetBool("isSliding", true);
+        yield return new WaitForSeconds(0.25f / Time.timeScale);
+        controller.center = new Vector3(0, -0.5f, 0);
+        controller.height = 1;
+
+        yield return new WaitForSeconds((slideDuration - 0.25f) / Time.timeScale);
+
+        animator.SetBool("isSliding", false);
+        controller.center = Vector3.zero;
+        controller.height = 2;
+
+        isSliding = false;
+    }
+
+    private void OnDrawGizmos()
+    {
+        if (groundCheck != null)
+        {
+            Gizmos.color = Color.red;
+            Gizmos.DrawSphere(groundCheck.position, 0.1f);
+        }
+    }
+
+
 
 
 }
